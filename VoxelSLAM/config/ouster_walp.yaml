@@ -1,60 +1,83 @@
 /**:
   ros__parameters:
     General:
-      lid_topic: "/husky/ouster/points"
-      imu_topic: "/husky/ouster/imu"
-      imu_acc_unit_is_g: false
-      save_path: "/home/niksta/rosbags/"
-      previous_map: ""
-      bagname: "inter_"
-      lidar_type: 2 # 0: Livox, 1: Velodyne, 2: Ouster, 3: Hesai, 4: Robosense, 5: Tartanair, 6: Gazebo
-      blind: 1.0
-      point_filter_num: 3
-      extrinsic_tran: [0.0, 0.0, 0.0285]
-      extrinsic_rota: [-1.0, 0.0, 0.0, 
-                        0.0,-1.0, 0.0, 
+      # ROS topic names for sensor inputs
+      lid_topic: "/husky/ouster/points"                    # LiDAR point cloud topic subscription
+      imu_topic: "/husky/vectornav/imu"                       # IMU measurement topic subscription
+      imu_acc_unit_is_g: false                             # True if accelerometer units are in g (9.8m/s²), false if in m/s²
+      
+      # File I/O configuration
+      save_path: "/home/niksta/rosbags/"                   # Directory to save trajectory, map, and debug data
+      previous_map: ""                                     # Load previous maps for loop closure refinement (format: "name1:threshold1,name2:threshold2")
+      bagname: "inter_"                                    # Session name/prefix for saved files
+      is_save_map: 0                                       # 0: don't save map, 1: save map (requires empty/preparted save_path)
+      
+      # LiDAR sensor configuration
+      lidar_type: 2                                        # 0: Livox, 1: Velodyne, 2: Ouster, 3: Hesai, 4: Robosense, 5: Tartanair, 6: Gazebo
+      blind: 1.0                                          # Minimum scanning range - points closer than blind² are ignored
+      point_filter_num: 1                                 # Downsample point cloud by keeping every Nth point in raw data
+      
+      # Extrinsic calibration: LiDAR to IMU transformation
+      extrinsic_tran: [0.0, 0.0, 0.0285]                 # Translation (x,y,z) from IMU to LiDAR in meters
+      extrinsic_rota: [-1.0, 0.0, 0.0,                   # Rotation matrix (row-major 3x3) from IMU to LiDAR coordinate frame
+                        0.0,-1.0, 0.0,                    # comes from os_lidar so we need 180 on z.
                         0.0, 0.0, 1.0]
-      is_save_map: 0
 
     Odometry:
-      cov_gyr: 0.01 # 0.01
-      cov_acc: 1.0
-      rdw_gyr: 0.0001
-      rdw_acc: 0.0001
-      down_size: 0.4 # 0.2
-      # dept_err: 0.02
-      beam_err: 0.01
-      dept_err: 0.01
-      voxel_size: 2.0 # 0.5
-      min_eigen_value: 0.01 # 0.0025
-      degrade_bound: 100
-      point_notime: 0
+      # IMU covariance (affects state estimation uncertainty)
+      cov_gyr: 0.01                                       # Gyroscope measurement noise covariance (rad²/s²)
+      cov_acc: 1.0                                        # Accelerometer measurement noise covariance (m²/s⁴)
+      rdw_gyr: 0.0001                                     # Gyroscope random walk noise (bias drift rate)
+      rdw_acc: 0.0001                                     # Accelerometer random walk noise (bias drift rate)
+      
+      # Point cloud processing
+      down_size: 0.4                                      # Voxel grid downsampling size (meters) - larger = fewer points
+      dept_err: 0.01                                      # Depth measurement error/uncertainty (meters)
+      beam_err: 0.01                                      # Beam divergence/angular measurement error (radians)
+      
+      # Map representation parameters
+      voxel_size: 1.0 #2.0                                # Voxel grid size for local map (meters) - larger = coarser map
+      min_eigen_value: 0.01                               # Threshold to detect planar surfaces in voxels (eigenvalue-based)
+      
+      # System robustness
+      degrade_bound: 100                                  # Number of consecutive failed odometry updates before system reset
+      point_notime: 0                                     # 0: use timestamp alignment, 1: ignore point cloud timestamps
 
     LocalBA:
-      win_size: 10
-      max_layer: 1 # 1
-      cov_gyr: 0.01 # 0.01
-      cov_acc: 1.0
-      rdw_gyr: 0.0001
-      rdw_acc: 0.0001
-      min_ba_point: 1
-      # plane_eigen_value_thre: [16.0, 16.0, 16.0, 16.0]
-      plane_eigen_value_thre: [4.0, 4.0, 4.0, 4.0]
-      imu_coef: 0.0002
-      thread_num: 5
+      # Sliding window/local bundle adjustment configuration
+      win_size: 10                                        # Number of frames in local optimization window
+      max_layer: 1                                        # Maximum depth layers in octree for voxel matching
+      
+      # IMU preintegration covariance (same as Odometry but scoped to LocalBA)
+      cov_gyr: 0.01                                       # Gyroscope noise for BA
+      cov_acc: 1.0                                        # Accelerometer noise for BA
+      rdw_gyr: 0.0001                                     # Gyroscope bias random walk for BA
+      rdw_acc: 0.0001                                     # Accelerometer bias random walk for BA
+      
+      # BA solving parameters
+      min_ba_point: 1                                     # Minimum number of matched points per frame to run BA
+      plane_eigen_value_thre: [4.0, 4.0, 4.0, 4.0]        # Weight threshold for plane fitting in BA residuals (inverted in code). Higher = more weight on planes so it relaxes the plane constraint.
+      imu_coef: 0.0002                                    # IMU factor weight coefficient in BA optimization
+      thread_num: 8                                       # Number of threads for multi-threaded map updates
 
     Loop:
-      jud_default: 0.5
-      icp_eigval: 9.0
-      ratio_drift: 0.01
-      curr_halt: 10
-      prev_halt: 10
-      acsize: 2
-      mgsize: 2
-      isHighFly: 0
+      # Loop closure detection and refinement
+      jud_default: 0.3                                    # Default similarity threshold for loop candidate ranking (0-1)
+      icp_eigval: 4.0 #9.0                                # Eigenvalue threshold for ICP plane quality check. Higher = more strict, lower = more lenient.
+      ratio_drift: 0.1 #0.01                              # Drift ratio threshold for loop closure acceptance. Lower = more strict, higher = more lenient.
+      
+      # Loop closure timing control
+      curr_halt: 10                                       # Minimum frames to wait before current frame can serve as loop candidate
+      prev_halt: 10                                       # Minimum frames to wait before previous frame can be loop-closed
+      
+      # Keyframe management for loop closure matching
+      acsize: 10 #2                                       # Accumulation size - number of frames per BTC descriptor
+      mgsize: 5  #2                                       # Marginalization size - number of frames to remove per step
+      isHighFly: 0                                        # 0: normal flight, 1: high-altitude flight (adjusts BTC parameters)
 
     GBA:
-      voxel_size: 2.0
-      min_eigen_value: 0.01
-      eigen_value_array: [4.0, 4.0, 4.0, 4.0]
-      total_max_iter: 6
+      # Global bundle adjustment (after loop closure refinement)
+      voxel_size: 2.0                                     # Voxel size for global map representation
+      min_eigen_value: 0.01                               # Minimum eigenvalue for plane detection in global BA
+      eigen_value_array: [4.0, 4.0, 4.0, 4.0]            # Plane weight thresholds for global BA residuals
+      total_max_iter: 6                                   # Maximum iterations for global BA optimization
