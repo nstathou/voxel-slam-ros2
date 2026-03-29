@@ -30,16 +30,19 @@ public:
 
     Eigen::Matrix3d R_pose;
     Eigen::Vector3d t_pose;
+    Eigen::Vector3d v_pose;
 
     if (relocalized) {
       // After relocalization: transform to map coordinate
       // T_map_aft = T_map_cam * T_cam_aft
       R_pose = R_map_cam * xc.R;
       t_pose = R_map_cam * xc.p + t_map_cam;
+      v_pose = R_map_cam * xc.v;
     } else {
       // Before relocalization: use camera_init coordinate
       R_pose = xc.R;
       t_pose = xc.p;
+      v_pose = xc.v;
     }
 
     Eigen::Quaterniond q_pose(R_pose);
@@ -58,6 +61,24 @@ public:
     tf_msg.transform.rotation.z = q_pose.z();
 
     tf_broadcaster->sendTransform(tf_msg);
+
+    // Publish odometry message
+    nav_msgs::msg::Odometry odom_msg;
+    odom_msg.header.stamp = now;
+    odom_msg.header.frame_id = "camera_init";
+    odom_msg.child_frame_id = "aft_mapped";
+    odom_msg.pose.pose.position.x = t_pose.x();
+    odom_msg.pose.pose.position.y = t_pose.y();
+    odom_msg.pose.pose.position.z = t_pose.z();
+    odom_msg.pose.pose.orientation.w = q_pose.w();
+    odom_msg.pose.pose.orientation.x = q_pose.x();
+    odom_msg.pose.pose.orientation.y = q_pose.y();
+    odom_msg.pose.pose.orientation.z = q_pose.z();
+    odom_msg.twist.twist.linear.x = v_pose.x();
+    odom_msg.twist.twist.linear.y = v_pose.y();
+    odom_msg.twist.twist.linear.z = v_pose.z();
+
+    pub_odom->publish(odom_msg);
   }
 
   void set_map_origin(const Eigen::Matrix3d &R_map_base, const Eigen::Vector3d &t_map_base,
@@ -2792,6 +2813,9 @@ int main(int argc, char **argv)
   rclcpp::QoS relocalized_qos(1);
   relocalized_qos.transient_local().reliable();
   pub_relocalized = g_node->create_publisher<std_msgs::msg::Empty>("/slam/relocalized", relocalized_qos);
+
+  // Odometry publisher
+  pub_odom = g_node->create_publisher<nav_msgs::msg::Odometry>("/odom", 100);
 
   VOXEL_SLAM vs(g_node);
   mp = new int[vs.win_size];

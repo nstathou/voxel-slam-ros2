@@ -24,6 +24,7 @@
 #include <Eigen/Sparse>
 #include <Eigen/SparseQR>
 #include "BTC.h"
+#include <nav_msgs/msg/odometry.hpp>
 
 using namespace std;
 
@@ -32,6 +33,7 @@ extern rclcpp::Node::SharedPtr g_node;
 extern std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster;
 
 rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_scan;
+rclcpp::Publisher<nav_msgs::msg::Odometry>::SharedPtr pub_odom;
 rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_cmap;
 rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_init;
 rclcpp::Publisher<sensor_msgs::msg::PointCloud2>::SharedPtr pub_pmap;
